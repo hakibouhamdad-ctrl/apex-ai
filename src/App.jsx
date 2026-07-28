@@ -567,4 +567,506 @@ function Sidebar({
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
             {user?.photoURL ? (
               <img
+                src={user.photoURL}
+                alt={user.displayName}
+                className="w-9 h-9 rounded-full flex-shrink-0"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-indigo-500 flex items-center justify-center text-white flex-shrink-0">
+                <User className="w-4 h-4" />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">
+                {user?.displayName || "Utilisateur"}
+              </p>
+              {isAdmin ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-yellow-500">
+                  <Crown className="w-3 h-3" />
+                  ADMIN VIP
+                </span>
+              ) : (
+                <p className="text-xs text-gray-500 truncate">
+                  {user?.email}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={onLogout}
+              className="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-apexgray3 transition flex-shrink-0"
+              aria-label="Déconnexion"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+/* ============================================================
+   CHAT MESSAGE BUBBLE
+   ============================================================ */
+
+function MessageBubble({ message }) {
+  const isUser = message.role === "user";
+  return (
+    <div
+      className={`flex w-full ${
+        isUser ? "justify-end" : "justify-start"
+      } animate-slide-up`}
+    >
+      <div
+        className={`flex items-end gap-2 max-w-[85%] md:max-w-[70%] ${
+          isUser ? "flex-row-reverse" : "flex-row"
+        }`}
+      >
+        {!isUser && (
+          <div className="w-7 h-7 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center flex-shrink-0 text-xs font-black italic">
+            A
+          </div>
+        )}
+        <div
+          className={`px-4 py-3 rounded-2xl text-sm leading-relaxed markdown-content ${
+            isUser
+              ? "bg-indigo-500 text-white rounded-br-sm"
+              : "bg-gray-100 dark:bg-apexgray3 text-black dark:text-white rounded-bl-sm"
+          } ${message.isError ? "border border-red-500/50" : ""}`}
+        >
+          <ReactMarkdown>{message.content}</ReactMarkdown>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ThinkingBubble() {
+  return (
+    <div className="flex justify-start animate-fade-in">
+      <div className="flex items-end gap-2 max-w-[70%]">
+        <div className="w-7 h-7 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center flex-shrink-0 text-xs font-black italic">
+          A
+        </div>
+        <div className="px-4 py-3.5 rounded-2xl rounded-bl-sm bg-gray-100 dark:bg-apexgray3 flex items-center gap-2">
+          <span className="text-sm text-gray-500">Apex réfléchit</span>
+          <span className="flex gap-1">
+            <span className="thinking-dot w-1.5 h-1.5 bg-gray-500 rounded-full inline-block" />
+            <span className="thinking-dot w-1.5 h-1.5 bg-gray-500 rounded-full inline-block" />
+            <span className="thinking-dot w-1.5 h-1.5 bg-gray-500 rounded-full inline-block" />
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   QUOTA BANNER
+   ============================================================ */
+
+function QuotaBanner({ resetTime }) {
+  return (
+    <div className="mx-4 mb-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start gap-3 animate-slide-up">
+      <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+      <div className="flex-1">
+        <p className="text-sm font-semibold text-red-500">
+          Vous avez atteint votre limite d'utilisation.
+        </p>
+        <p className="text-xs text-red-400 flex items-center gap-1.5 mt-1">
+          <Clock className="w-3.5 h-3.5" />
+          Vos crédits seront rechargés à {resetTime}.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   DASHBOARD (APP PRINCIPALE APRÈS CONNEXION)
+   ============================================================ */
+
+function Dashboard({ user, isAdmin, theme, toggleTheme, onLogout }) {
+  const [conversations, setConversations] = useState(() => loadConversations());
+  const [activeId, setActiveId] = useState(null);
+  const [selectedModel, setSelectedModel] = useState("apex-2.5");
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [quotaReached, setQuotaReached] = useState(false);
+  const [resetTime, setResetTime] = useState("");
+  const messagesEndRef = useRef(null);
+
+  const activeConversation = useMemo(
+    () => conversations.find((c) => c.id === activeId) || null,
+    [conversations, activeId]
+  );
+
+  useEffect(() => {
+    saveConversations(conversations);
+  }, [conversations]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activeConversation?.messages, isLoading]);
+
+  const createNewConversation = useCallback(() => {
+    const newConv = {
+      id: generateId(),
+      title: "Nouvelle discussion",
+      messages: [],
+      createdAt: Date.now(),
+    };
+    setConversations((prev) => [newConv, ...prev]);
+    setActiveId(newConv.id);
+    setSidebarOpen(false);
+  }, []);
+
+  const deleteConversation = useCallback(
+    (id) => {
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      if (activeId === id) setActiveId(null);
+    },
+    [activeId]
+  );
+
+  const updateConversationMessages = useCallback((convId, updater) => {
+    setConversations((prev) =>
+      prev.map((c) => {
+        if (c.id !== convId) return c;
+        const newMessages = updater(c.messages);
+        let title = c.title;
+        if (c.messages.length === 0 && newMessages.length > 0) {
+          const firstUserMsg = newMessages.find((m) => m.role === "user");
+          if (firstUserMsg) {
+            title = firstUserMsg.content.slice(0, 40) +
+              (firstUserMsg.content.length > 40 ? "..." : "");
+          }
+        }
+        return { ...c, messages: newMessages, title };
+      })
+    );
+  }, []);
+
+  const handleSend = useCallback(async () => {
+    const trimmed = input.trim();
+    if (!trimmed || isLoading || quotaReached) return;
+
+    let convId = activeId;
+    if (!convId) {
+      const newConv = {
+        id: generateId(),
+        title: "Nouvelle discussion",
+        messages: [],
+        createdAt: Date.now(),
+      };
+      setConversations((prev) => [newConv, ...prev]);
+      convId = newConv.id;
+      setActiveId(convId);
+    }
+
+    const userMessage = {
+      id: generateId(),
+      role: "user",
+      content: trimmed,
+    };
+
+    updateConversationMessages(convId, (msgs) => [...msgs, userMessage]);
+    setInput("");
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: trimmed,
+          model_id: selectedModel,
+          user_email: user?.email || "",
+        }),
+      });
+
+      if (response.status === 429 || response.status === 403) {
+        const next = formatNextResetTime();
+        setResetTime(next);
+        setQuotaReached(true);
+
+        const errorMessage = {
+          id: generateId(),
+          role: "assistant",
+          content:
+            "⚠️ Vous avez atteint votre limite de requêtes. Vos crédits seront rechargés bientôt.",
+          isError: true,
+        };
+        updateConversationMessages(convId, (msgs) => [...msgs, errorMessage]);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Erreur serveur (${response.status})`);
+      }
+
+      const data = await response.json();
+      const rawReply =
+        data.reply ||
+        data.message ||
+        data.response ||
+        data.content ||
+        "Désolé, je n'ai pas pu générer de réponse.";
+
+      const cleanReply = sanitizeIdentity(rawReply);
+
+      const assistantMessage = {
+        id: generateId(),
+        role: "assistant",
+        content: cleanReply,
+      };
+
+      updateConversationMessages(convId, (msgs) => [...msgs, assistantMessage]);
+    } catch (error) {
+      console.error("Erreur API:", error);
+      const errorMessage = {
+        id: generateId(),
+        role: "assistant",
+        content:
+          "❌ Une erreur est survenue lors de la communication avec Apex AI. Veuillez réessayer dans quelques instants.",
+        isError: true,
+      };
+      updateConversationMessages(convId, (msgs) => [...msgs, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [
+    input,
+    isLoading,
+    quotaReached,
+    activeId,
+    selectedModel,
+    user,
+    updateConversationMessages,
+  ]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const inputDisabled = isLoading || (quotaReached && !isAdmin);
+
+  return (
+    <div className="h-screen w-full flex bg-white dark:bg-black text-black dark:text-white overflow-hidden">
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        conversations={conversations}
+        activeId={activeId}
+        onSelectConversation={(id) => {
+          setActiveId(id);
+          setSidebarOpen(false);
+        }}
+        onNewConversation={createNewConversation}
+        onDeleteConversation={deleteConversation}
+        user={user}
+        isAdmin={isAdmin}
+        onLogout={onLogout}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-apexgray3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden p-2 rounded-full hover:bg-gray-100 dark:hover:bg-apexgray3"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <span className="font-semibold text-sm truncate max-w-[150px] md:max-w-xs">
+              {activeConversation?.title || "Apex AI"}
+            </span>
+            {isAdmin && (
+              <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-400/20 text-yellow-500 text-[10px] font-bold">
+                <Crown className="w-3 h-3" />
+                VIP
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <ModelSelector
+              selectedModel={selectedModel}
+              setSelectedModel={setSelectedModel}
+            />
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-full bg-gray-100 dark:bg-apexgray3 hover:opacity-80 transition"
+            >
+              {theme === "dark" ? (
+                <Sun className="w-4 h-4 text-yellow-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-indigo-600" />
+              )}
+            </button>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4">
+          {!activeConversation || activeConversation.messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center px-4">
+              <div className="w-16 h-16 rounded-2xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center text-2xl font-black italic mb-4">
+                A
+              </div>
+              <h2 className="text-xl font-bold mb-2">
+                Bonjour {user?.displayName?.split(" ")[0] || ""} 👋
+              </h2>
+              <p className="text-gray-500 text-sm max-w-sm">
+                Posez une question à Apex AI et commencez votre conversation.
+              </p>
+            </div>
+          ) : (
+            <>
+              {activeConversation.messages.map((msg) => (
+                <MessageBubble key={msg.id} message={msg} />
+              ))}
+              {isLoading && <ThinkingBubble />}
+            </>
+          )}
+          <div ref={messagesEndRef} />
+        </main>
+
+        {quotaReached && !isAdmin && <QuotaBanner resetTime={resetTime} />}
+
+        <div className="p-4 border-t border-gray-100 dark:border-apexgray3">
+          <div
+            className={`flex items-end gap-2 rounded-2xl border transition ${
+              inputDisabled
+                ? "border-gray-200 dark:border-apexgray3 opacity-50"
+                : "border-gray-200 dark:border-apexgray3 focus-within:border-indigo-500"
+            } bg-gray-50 dark:bg-apexgray2 px-3 py-2`}
+          >
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={inputDisabled}
+              rows={1}
+              placeholder={
+                inputDisabled && quotaReached
+                  ? "Limite atteinte, veuillez patienter..."
+                  : "Écrivez votre message à Apex AI..."
+              }
+              className="flex-1 resize-none bg-transparent outline-none text-sm py-2 px-1 max-h-32 disabled:cursor-not-allowed"
+            />
+            <button
+              onClick={handleSend}
+              disabled={inputDisabled || !input.trim()}
+              className="p-2.5 rounded-xl bg-indigo-500 text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-600 transition flex-shrink-0"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        theme={theme}
+        toggleTheme={toggleTheme}
+        user={user}
+        isAdmin={isAdmin}
+      />
+    </div>
+  );
+}
+
+/* ============================================================
+   APP ROOT
+   ============================================================ */
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem("apex_theme");
+    return saved || "dark";
+  });
+
+  useEffect(() => {
+    const unsubscribe = subscribeToAuthChanges((firebaseUser) => {
+      setUser(firebaseUser);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("apex_theme", theme);
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  };
+
+  const handleLogin = async () => {
+    setLoginLoading(true);
+    try {
+      await loginWithGoogle();
+    } catch (error) {
+      console.error("Échec de la connexion:", error);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error("Échec de la déconnexion:", error);
+    }
+  };
+
+  const isAdmin = user?.email === ADMIN_EMAIL;
+
+  if (authLoading) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-black">
+        <div className="text-white text-2xl font-black italic animate-pulse-slow">
+          Apex AI
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <LandingPage
+        onLogin={handleLogin}
+        loading={loginLoading}
+        theme={theme}
+        toggleTheme={toggleTheme}
+      />
+    );
+  }
+
+  return (
+    <Dashboard
+      user={user}
+      isAdmin={isAdmin}
+      theme={theme}
+      toggleTheme={toggleTheme}
+      onLogout={handleLogout}
+    />
+  );
+        }
                
